@@ -1,0 +1,27 @@
+{
+  "timestamp": "2025-11-19 15:25:35",
+  "systeme": {
+    "os": "Windows",
+    "version": "10",
+    "architecture": "AMD64",
+    "hostname": "nadonx"
+  },
+  "cpu": {
+    "coeurs_physiques": 8,
+    "coeurs_logiques": 12,
+    "utilisation": 13.2
+  },
+  "memoire": {
+    "total": 16890519552,
+    "disponible": 6083858432,
+    "pourcentage": 64.0
+  },
+  "disques": [
+    {
+      "point_montage": "C:\\",
+      "total": 511018266624,
+      "utilise": 461975003136,
+      "pourcentage": 90.4
+    }
+  ]
+}

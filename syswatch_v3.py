@@ -1,61 +1,115 @@
-import argparse
+import sys
 import time
 import os
-from datetime import datetime
 import collector
 import traitement
 
-# Fonction de collecte continue
+def octets_vers_go(octets):
+    """
+    Transforme des octets en Go avec deux décimales.
+    """
+    return f"{octets / (1024 ** 3):.2f} GB"
+
+def afficher(m):
+    """
+    Affiche toutes les métriques collectées.
+    """
+    print("=> SysWatch v3.0")
+    print("Timestamp:", m["timestamp"])
+    print()
+    
+    print("=> Système")
+    print("OS:", m["systeme"]["os"])
+    print("Hostname:", m["systeme"]["hostname"])
+    print()
+
+    print("=> CPU")
+    print(f"Utilisation: {m['cpu']['utilisation']:.1f}%")
+    print()
+
+    print("=> Mémoire")
+    print("Total:", octets_vers_go(m["memoire"]["total"]))
+    print("Disponible:", octets_vers_go(m["memoire"]["disponible"]))
+    print(f"Utilisation: {m['memoire']['pourcentage']:.1f}%")
+    print()
+
+    print("=> Disques")
+    for d in m["disques"]:
+        print(f"{d['point_montage']} : {d['pourcentage']:.1f}%")
+    print()
+
 def collecter_en_continu(intervalle, nombre):
     """
-    Collecte continue des métriques pendant un intervalle spécifié.
+    Collecte en boucle selon un intervalle donné.
+    S'arrête avec Ctrl+C.
     """
-    count = 0
-    while nombre == 0 or count < nombre:
-        print(f"Collecte {count + 1}...")
-        donnees = collector.collecter_tout()
-        print(f"Timestamp: {donnees['timestamp']}")
+    compteur = 0
 
-        # Exportation CSV et JSON
-        traitement.exporter_csv(donnees, 'donnees.csv')
-        traitement.exporter_json(donnees, 'donnees.json')
+    try:
+        while True:
+            met = collector.collecter_tout()
+            afficher(met)
+            try:
+                traitement.exporter_csv(met, "historique.csv")
+                traitement.exporter_json(met, "dernier.json")
+            except Exception as e:
+                print(f"Erreur lors de l'export : {e}")
 
-        # Attente avant la prochaine collecte
-        time.sleep(intervalle)
-        count += 1
+            compteur += 1
+            if nombre != 0 and compteur >= nombre:
+                break
 
-# Fonction de traitement des arguments en ligne de commande
-def traiter_arguments():
-    parser = argparse.ArgumentParser(description="Collecte et traitement des données système")
+            time.sleep(intervalle)
 
-    # Arguments pour la collecte continue
-    parser.add_argument('--continu', action='store_true', help="Collecte continue des données")
-    parser.add_argument('--intervalle', type=int, default=30, help="Intervalle entre chaque collecte (en secondes)")
-    parser.add_argument('--nombre', type=int, default=0, help="Nombre de collectes (0 pour infini)")
-    parser.add_argument('--stats', action='store_true', help="Affiche les statistiques du fichier CSV")
+    except KeyboardInterrupt:
+        print("Arrêt demandé par l'utilisateur.")
 
-    args = parser.parse_args()
-
-    return args
-
-def main():
-    args = traiter_arguments()
-
-    if args.stats:
-        # Affichage des statistiques
-        stats = traitement.calculer_moyennes('donnees.csv')
-        print(f"Statistiques : {stats}")
+def afficher_stats():
+    """
+    Affiche les statistiques chargées depuis le CSV.
+    """
+    if not os.path.exists("historique.csv"):
+        print("Aucun fichier CSV trouvé.")
         return
 
-    if args.continu:
-        # Collecte continue
-        collecter_en_continu(args.intervalle, args.nombre)
-    else:
-        # Collecte unique
-        donnees = collector.collecter_tout()
-        print(f"Timestamp: {donnees['timestamp']}")
-        traitement.exporter_csv(donnees, 'donnees.csv')
-        traitement.exporter_json(donnees, 'donnees.json')
+    stats = traitement.calculer_moyennes("historique.csv")
+    if not stats:
+        print("Aucune donnée CSV disponible.")
+        return
+
+    print("=> Statistiques")
+    print(f"CPU : min={stats['cpu_min']:.1f} | max={stats['cpu_max']:.1f} | moy={stats['cpu_moy']:.1f}")
+    print(f"MEM : min={stats['mem_min']:.1f} | max={stats['mem_max']:.1f} | moy={stats['mem_moy']:.1f}")
+    print()
 
 if __name__ == "__main__":
-    main()
+    args = sys.argv[1:]
+
+    # Pas d’arguments → collecte unique
+    if args == []:
+        m = collector.collecter_tout()
+        afficher(m)
+        try:
+            traitement.exporter_csv(m, "historique.csv")
+            traitement.exporter_json(m, "dernier.json")
+        except Exception as e:
+            print(f"Erreur lors de l'export : {e}")
+        sys.exit()
+
+    # Arguments
+    intervalle = 10
+    nombre = 0
+
+    if "--intervalle" in args:
+        i = args.index("--intervalle")
+        intervalle = int(args[i + 1])
+
+    if "--nombre" in args:
+        i = args.index("--nombre")
+        nombre = int(args[i + 1])
+
+    if "--continu" in args:
+        collecter_en_continu(intervalle, nombre)
+
+    if "--stats" in args:
+        afficher_stats()
